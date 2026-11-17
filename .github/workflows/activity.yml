@@ -1,0 +1,49 @@
+# Redraws the Sonar section: the contribution heatmap (scripts/activity.py) and the snake (Platane/snk).
+# Both images go to an `output` branch that holds only generated files; the README loads them from there.
+# First run: Actions tab -> "Sonar images" -> Run workflow. Until then the two images show as broken.
+name: Sonar images
+
+on:
+  schedule:
+    - cron: "23 4 * * *"   # once a day
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-images
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  draw:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Heatmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/activity.py --user "${{ github.repository_owner }}" --out dist/activity.svg
+
+      - name: Snake
+        uses: Platane/snk/svg-only@d8f6715049803e982ee5ff501b6b9b7d5deeb09b # v3.5.0
+        with:
+          github_user_name: ${{ github.repository_owner }}
+          outputs: |
+            dist/snake.svg?color_snake=#e6ca7f&color_dots=#0e1c29,#143349,#3fbdc9,#4fe3c1,#dcebf3
+
+      - name: Publish to the output branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd dist
+          git init -q -b output
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add activity.svg snake.svg
+          git commit -q -m "Sonar images $(date -u +%F)"
+          # The output branch only ever holds these two generated files, so it is replaced each run.
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" output
